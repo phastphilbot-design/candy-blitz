@@ -12,24 +12,19 @@ canvas { display:block; width:100%; height:100%; }
 </style>
 </head>
 <body>
-<div id="dbg" style="position:fixed;top:0;left:0;background:red;color:#fff;font:14px monospace;padding:8px;z-index:9999;max-width:100vw;word-break:break-all;display:none"></div>
 <canvas id="c"></canvas>
 <script>
 // ══════════════════════════════════════════
 // CANDY BLITZ - Complete Match-3 Game
 // 100 levels, specials, sounds, animations
 // ══════════════════════════════════════════
-window.onerror=function(msg,src,line,col){document.getElementById('dbg').style.display='block';document.getElementById('dbg').textContent='ERR line '+line+': '+msg;};
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-if(!ctx){document.getElementById('dbg').style.display='block';document.getElementById('dbg').textContent='ERROR: Canvas not supported in this browser';}
 function resize(){canvas.width=canvas.offsetWidth||window.innerWidth;canvas.height=canvas.offsetHeight||window.innerHeight;}
 window.addEventListener('resize',resize);
 document.addEventListener('DOMContentLoaded',function(){resize();});
 resize();
-document.getElementById('dbg').style.display='block';
-document.getElementById('dbg').textContent='JS OK - canvas:'+canvas.width+'x'+canvas.height;
 
 // ── COLOURS ──
 const COLORS = ['#E74C3C','#E67E22','#F1C40F','#2ECC71','#3498DB','#9B59B6'];
@@ -580,7 +575,7 @@ function checkObjective(){
 // INPUT
 // ═══════════════════════════════════════
 let dragStart=null;
-function evPos(e){const r=canvas.getBoundingClientRect(),s=e.touches?e.touches[0]:e.changedTouches?e.changedTouches[0]:e;return{x:(s.clientX-r.left)*(canvas.width/r.width),y:(s.clientY-r.top)*(canvas.height/r.height)};}
+function evPos(e){const r=canvas.getBoundingClientRect(),s=(e.touches&&e.touches.length>0)?e.touches[0]:(e.changedTouches&&e.changedTouches.length>0)?e.changedTouches[0]:e;return{x:(s.clientX-r.left)*(canvas.width/r.width),y:(s.clientY-r.top)*(canvas.height/r.height)};}
 
 canvas.addEventListener('mousedown',e=>{
   initAudio();const p=evPos(e);
@@ -645,8 +640,6 @@ function loop(ts){
 
 loadProgress();
 requestAnimationFrame(ts=>{
-  document.getElementById('dbg').textContent='LOOP START - state:'+state+' levels:'+LEVELS.length;
-  setTimeout(()=>{document.getElementById('dbg').style.display='none';},3000);
   last=ts;loop(ts);
 });
 </script>
