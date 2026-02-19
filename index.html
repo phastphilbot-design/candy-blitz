@@ -584,7 +584,7 @@ function evPos(e){const r=canvas.getBoundingClientRect(),s=e.touches?e.touches[0
 
 canvas.addEventListener('mousedown',e=>{
   initAudio();const p=evPos(e);
-  if(state==='map'){mapScrollStart=p.y;return;}
+  if(state==='map'){mapScrollStart=p.y;dragStart=p;return;}
   if(state!=='playing'){hitBtn(p.x,p.y);return;}
   if(isAnimating)return;
   if(hitBtn(p.x,p.y))return;
@@ -593,13 +593,17 @@ canvas.addEventListener('mousedown',e=>{
 });
 canvas.addEventListener('mouseup',e=>{
   const p=evPos(e);
+  if(state==='map'){
+    if(dragStart&&Math.abs(p.y-dragStart.y)<10)hitBtn(p.x,p.y);
+    dragStart=null;return;
+  }
   if(state!=='playing'||!dragStart||!selectedCandy){dragStart=null;return;}
   const dx=p.x-dragStart.x,dy=p.y-dragStart.y;
   if(Math.sqrt(dx*dx+dy*dy)>15){let tx=selectedCandy.x,ty=selectedCandy.y;if(Math.abs(dx)>Math.abs(dy))tx+=dx>0?1:-1;else ty+=dy>0?1:-1;trySwap(selectedCandy.x,selectedCandy.y,tx,ty);}
   dragStart=null;selectedCandy=null;
 });
-canvas.addEventListener('touchstart',e=>{e.preventDefault();initAudio();const p=evPos(e);if(state==='map'){mapScrollStart=p.y;return;}if(state!=='playing'){hitBtn(p.x,p.y);return;}if(isAnimating)return;if(hitBtn(p.x,p.y))return;dragStart=p;if(renderer){const g=renderer.gridPos(p.x,p.y);selectedCandy=grid.get(g.gx,g.gy);}},{passive:false});
-canvas.addEventListener('touchend',e=>{e.preventDefault();const p=evPos(e);if(state!=='playing'||!dragStart||!selectedCandy){dragStart=null;return;}const dx=p.x-dragStart.x,dy=p.y-dragStart.y;if(Math.sqrt(dx*dx+dy*dy)>15){let tx=selectedCandy.x,ty=selectedCandy.y;if(Math.abs(dx)>Math.abs(dy))tx+=dx>0?1:-1;else ty+=dy>0?1:-1;trySwap(selectedCandy.x,selectedCandy.y,tx,ty);}dragStart=null;selectedCandy=null;},{passive:false});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();initAudio();const p=evPos(e);if(state==='map'){mapScrollStart=p.y;dragStart=p;return;}if(state!=='playing'){hitBtn(p.x,p.y);return;}if(isAnimating)return;if(hitBtn(p.x,p.y))return;dragStart=p;if(renderer){const g=renderer.gridPos(p.x,p.y);selectedCandy=grid.get(g.gx,g.gy);}},{passive:false});
+canvas.addEventListener('touchend',e=>{e.preventDefault();const p=evPos(e);if(state==='map'){if(dragStart&&Math.abs(p.y-dragStart.y)<15)hitBtn(p.x,p.y);dragStart=null;return;}if(state!=='playing'||!dragStart||!selectedCandy){dragStart=null;return;}const dx=p.x-dragStart.x,dy=p.y-dragStart.y;if(Math.sqrt(dx*dx+dy*dy)>15){let tx=selectedCandy.x,ty=selectedCandy.y;if(Math.abs(dx)>Math.abs(dy))tx+=dx>0?1:-1;else ty+=dy>0?1:-1;trySwap(selectedCandy.x,selectedCandy.y,tx,ty);}dragStart=null;selectedCandy=null;},{passive:false});
 canvas.addEventListener('wheel',e=>{if(state==='map'){mapScrollY=Math.max(0,mapScrollY+e.deltaY);}});
 canvas.addEventListener('touchmove',e=>{if(state==='map'){e.preventDefault();const p=evPos(e);mapScrollY=Math.max(0,mapScrollY-(p.y-mapScrollStart));mapScrollStart=p.y;}},{passive:false});
 
