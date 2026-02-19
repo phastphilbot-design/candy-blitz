@@ -259,7 +259,7 @@ class Grid{
 // 100 LEVELS
 // ═══════════════════════════════════════
 function mkL(id,name,obj,target,moves,opts={}){return{id,name,objective:obj,target,moves,jellyPositions:opts.jelly||[],ingredientCount:opts.ings||0,blockerPositions:opts.blockers||[],lockedPositions:opts.locked||[],chocolatePositions:opts.choc||[],starThresholds:[target,Math.round(target*1.5),target*2]};}
-function sc(n,s){const p=[],u=new Set();let x=s*7+3;while(p.length<n){x=(x*1103515245+12345)&0x7fffffff;const gx=x%8;x=(x*1103515245+12345)&0x7fffffff;const gy=x%8;const k=`${gx},${gy}`;if(!u.has(k)){u.add(k);p.push({x:gx,y:gy});}}return p;}
+function sc(n,s){const all=[];for(let y=0;y<8;y++)for(let x=0;x<8;x++)all.push({x,y});let r=(s*2654435761)>>>0;for(let i=63;i>0;i--){r=(r*1664525+1013904223)>>>0;const j=r%(i+1);const t=all[i];all[i]=all[j];all[j]=t;}return all.slice(0,n);}
 function jl(pts,layers=1){return pts.map(p=>({...p,layers}));}
 function vl(x,y1,y2){return Array.from({length:y2-y1+1},(_,i)=>({x,y:y1+i}));}
 function hl(x1,x2,y){return Array.from({length:x2-x1+1},(_,i)=>({x:x1+i,y}));}
