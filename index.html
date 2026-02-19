@@ -79,8 +79,39 @@ function easeOutBounce(t){const n=7.5625,d=2.75;if(t<1/d)return n*t*t;if(t<2/d)r
 const particles=[];
 function emitBurst(x,y,color,n=10){for(let i=0;i<n;i++){const a=Math.PI*2*i/n+Math.random()*0.5,s=2+Math.random()*4;particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,decay:0.03+Math.random()*0.02,size:3+Math.random()*5,color,style:'burst'});}}
 function emitConfetti(x,y,n=20){for(let i=0;i<n;i++){particles.push({x,y,vx:(Math.random()-0.5)*6,vy:-3-Math.random()*4,life:1,decay:0.01,size:4+Math.random()*5,color:COLORS[Math.floor(Math.random()*6)],spin:Math.random()*0.3-0.15,rot:Math.random()*Math.PI,style:'confetti'});}}
-function updateParticles(dt){for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx*dt*60;p.vy+=0.1*dt*60;p.y+=p.vy*dt*60;if(p.spin)p.rot+=p.spin*dt*60;p.life-=p.decay*dt*60;if(p.life<=0)particles.splice(i,1);}}
-function drawParticles(){particles.forEach(p=>{ctx.save();ctx.globalAlpha=Math.max(0,p.life);if(p.style==='confetti'){ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillStyle=p.color;ctx.fillRect(-p.size/2,-p.size/4,p.size,p.size/2);}else{ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2);ctx.fill();}ctx.restore();});}
+// Lightning bolt line effect (striped candy)
+function emitLineBlast(x,y,dir,color,len){
+  const steps=20;
+  for(let i=0;i<steps;i++){
+    const delay=i*0.015;
+    const dx=dir==='h'?(i-steps/2)*len/steps:((Math.random()-.5)*8);
+    const dy=dir==='v'?(i-steps/2)*len/steps:((Math.random()-.5)*8);
+    particles.push({x:x+dx,y:y+dy,vx:dir==='h'?(i<steps/2?-3:3):((Math.random()-.5)*2),vy:dir==='v'?(i<steps/2?-3:3):((Math.random()-.5)*2),life:1,decay:0.04,size:4+Math.random()*4,color,style:'lightning'});
+  }
+}
+// Expanding ring (wrapped candy)
+function emitRing(x,y,color){
+  for(let i=0;i<24;i++){
+    const a=Math.PI*2*i/24;particles.push({x,y,vx:Math.cos(a)*5,vy:Math.sin(a)*5,life:1,decay:0.035,size:5,color,style:'ring'});
+  }
+  setTimeout(()=>{for(let i=0;i<16;i++){const a=Math.PI*2*i/16;particles.push({x,y,vx:Math.cos(a)*3.5,vy:Math.sin(a)*3.5,life:1,decay:0.04,size:4,color:'#fff',style:'ring'});}},120);
+}
+// Rainbow zap (color bomb)
+function emitZap(fromX,fromY,toX,toY,color){
+  const dx=toX-fromX,dy=toY-fromY,steps=8;
+  for(let i=0;i<steps;i++){
+    const t=i/steps,px=fromX+dx*t+(Math.random()-.5)*10,py=fromY+dy*t+(Math.random()-.5)*10;
+    particles.push({x:px,y:py,vx:(Math.random()-.5)*2,vy:(Math.random()-.5)*2,life:1,decay:0.05,size:3+Math.random()*3,color,style:'zap'});
+  }
+}
+function updateParticles(dt){for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx*dt*60;if(p.style!=='ring'&&p.style!=='lightning')p.vy+=0.1*dt*60;p.y+=p.vy*dt*60;if(p.spin)p.rot+=p.spin*dt*60;p.life-=p.decay*dt*60;if(p.life<=0)particles.splice(i,1);}}
+function drawParticles(){particles.forEach(p=>{ctx.save();ctx.globalAlpha=Math.max(0,p.life);
+  if(p.style==='confetti'){ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillStyle=p.color;ctx.fillRect(-p.size/2,-p.size/4,p.size,p.size/2);}
+  else if(p.style==='lightning'){ctx.shadowColor=p.color;ctx.shadowBlur=8;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(p.x,p.y,p.size*p.life*.7,0,Math.PI*2);ctx.fill();ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2);ctx.fill();}
+  else if(p.style==='ring'){ctx.shadowColor=p.color;ctx.shadowBlur=6;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2);ctx.fill();}
+  else if(p.style==='zap'){ctx.shadowColor=p.color;ctx.shadowBlur=10;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(p.x,p.y,p.size*p.life*.5,0,Math.PI*2);ctx.fill();ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2);ctx.fill();}
+  else{ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2);ctx.fill();}
+  ctx.restore();});}
 
 // ── ANIMATIONS ──
 const anims=[];
@@ -375,6 +406,12 @@ class Renderer{
     if(c.blocker){ctx.fillStyle='#444';rrect(ctx,-r,-r,r*2,r*2,4);ctx.fill();ctx.strokeStyle='#222';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#666';ctx.font=`bold ${r}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('✕',0,1);ctx.restore();return;}
     if(c.chocolate){const g=ctx.createLinearGradient(-r,-r,r,r);g.addColorStop(0,'#8B4513');g.addColorStop(1,'#3E1F00');ctx.fillStyle=g;rrect(ctx,-r,-r,r*2,r*2,4);ctx.fill();ctx.strokeStyle='#2C0F00';ctx.lineWidth=2;ctx.stroke();ctx.strokeStyle='#6B3410';ctx.lineWidth=1;for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(-r,i*r*0.6);ctx.lineTo(r,i*r*0.6);ctx.stroke();}ctx.restore();return;}
 
+    // Glow behind specials
+    if(c.special!=='none'){
+      const glowPulse=0.3+0.2*Math.sin(Date.now()*0.005);
+      ctx.save();ctx.shadowColor=COLORS[c.color]||'#fff';ctx.shadowBlur=r*glowPulse;
+      ctx.beginPath();ctx.arc(0,0,r*1.1,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,0)';ctx.fill();ctx.restore();
+    }
     const col=COLORS[c.color]||COLORS[0];
     const g=ctx.createRadialGradient(-r*.3,-r*.3,r*.05,0,0,r*1.1);
     g.addColorStop(0,lighten(col,.5));g.addColorStop(.5,col);g.addColorStop(1,DARK[c.color]||'#000');
@@ -397,9 +434,13 @@ class Renderer{
       ctx.restore();
     } else if(c.special==='colorbomb'){
       ctx.save();ctx.clip();
-      COLORS.forEach((col,i)=>{const a=Math.PI*2*i/6,a2=Math.PI*2*(i+1)/6;ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,r,a,a2);ctx.fillStyle=col;ctx.fill();});
-      ctx.beginPath();ctx.arc(0,0,r*.35,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fill();
-      ctx.beginPath();ctx.arc(0,0,r*.2,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,0.8)';ctx.fill();
+      const spin=Date.now()*0.002;
+      COLORS.forEach((col,i)=>{const a=Math.PI*2*i/6+spin,a2=Math.PI*2*(i+1)/6+spin;ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,r,a,a2);ctx.fillStyle=col;ctx.fill();});
+      ctx.beginPath();ctx.arc(0,0,r*.35,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,0.6)';ctx.fill();
+      const starPulse=0.15+0.1*Math.sin(Date.now()*0.008);
+      ctx.beginPath();ctx.arc(0,0,r*(0.2+starPulse),0,Math.PI*2);
+      const sg=ctx.createRadialGradient(0,0,0,0,0,r*.3);sg.addColorStop(0,'rgba(255,255,255,1)');sg.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=sg;ctx.fill();
       ctx.restore();
     }
 
@@ -658,7 +699,7 @@ function trySwap(x1,y1,x2,y2){
     movesLeft--;scoring.cascade=0;isAnimating=true;
     hintTimer=0;hintMove=null;comboCount=0;
     const sa=a.special,sb=b.special,cx=a.x,cy=a.y;
-    playBomb();shake(10,0.6);
+    playBomb();
     if(sa==='colorbomb'&&sb==='colorbomb'){
       for(let y=0;y<8;y++)for(let x=0;x<8;x++){const c=grid.get(x,y);if(c&&!c.blocker)c.matched=true;}
     } else if(sa==='colorbomb'||sb==='colorbomb'){
@@ -675,10 +716,33 @@ function trySwap(x1,y1,x2,y2){
       for(let y=0;y<8;y++){const c=grid.get(cx,y);if(c&&!c.blocker)c.matched=true;}
     }
     const pp=renderer.canvasPos(cx,cy);
-    for(let i=0;i<6;i++)emitBurst(pp.px+(Math.random()-.5)*120,pp.py+(Math.random()-.5)*120,COLORS[Math.floor(Math.random()*6)],20);
-    emitConfetti(pp.px,pp.py,25);
-    addPopup(canvas.width/2,canvas.height/2-40,'COMBO!','#FFD700');
-    setTimeout(()=>processBoard(),200);
+    const cs=renderer.cellSize;
+    // Visual effects based on combo type
+    if(sa==='colorbomb'&&sb==='colorbomb'){
+      // Rainbow nuke - zap everything
+      for(let y=0;y<8;y++)for(let x=0;x<8;x++){const tp=renderer.canvasPos(x,y);emitZap(pp.px,pp.py,tp.px,tp.py,COLORS[Math.floor(Math.random()*6)]);}
+      emitConfetti(pp.px,pp.py,40);
+      addPopup(canvas.width/2,canvas.height/2-40,'TOTAL ANNIHILATION!','#FF00FF',30);
+    } else if(sa==='colorbomb'||sb==='colorbomb'){
+      // Rainbow zap to all matching
+      const other=sa==='colorbomb'?b:a;
+      for(let y=0;y<8;y++)for(let x=0;x<8;x++){const c=grid.get(x,y);if(c&&c.color===other.color){const tp=renderer.canvasPos(x,y);emitZap(pp.px,pp.py,tp.px,tp.py,COLORS[other.color]);}}
+      addPopup(canvas.width/2,canvas.height/2-40,'COLOR BLAST!','#FFD700',26);
+    } else if(sa==='wrapped'&&sb==='wrapped'){
+      emitRing(pp.px,pp.py,'#FF6600');
+      setTimeout(()=>emitRing(pp.px,pp.py,'#FFD700'),150);
+      addPopup(canvas.width/2,canvas.height/2-40,'MEGA BOMB!','#FF6600',28);
+    } else if((sa.includes('striped')&&sb==='wrapped')||(sa==='wrapped'&&sb.includes('striped'))){
+      emitLineBlast(pp.px,pp.py,'h','#FF9900',cs*8);
+      emitLineBlast(pp.px,pp.py,'v','#FF9900',cs*8);
+      emitRing(pp.px,pp.py,'#FF9900');
+      addPopup(canvas.width/2,canvas.height/2-40,'CROSS BLAST!','#FF9900',26);
+    } else {
+      emitLineBlast(pp.px,pp.py,'h','#FFD700',cs*8);
+      emitLineBlast(pp.px,pp.py,'v','#FFD700',cs*8);
+      addPopup(canvas.width/2,canvas.height/2-40,'DOUBLE LINE!','#FFD700',24);
+    }
+    setTimeout(()=>processBoard(),300);
     return;
   }
 
@@ -691,7 +755,13 @@ function trySwap(x1,y1,x2,y2){
   hintTimer=0;hintMove=null;comboCount=0;
   if(movesLeft%3===0)saveGame();
 
-  if(isColorBomb){const bomb=a.special==='colorbomb'?a:b,other=a.special==='colorbomb'?b:a;grid.activateSpecial(bomb.x,bomb.y,other.color);playBomb();}
+  if(isColorBomb){
+    const bomb=a.special==='colorbomb'?a:b,other=a.special==='colorbomb'?b:a;
+    const bp=renderer?renderer.canvasPos(bomb.x,bomb.y):{px:0,py:0};
+    // Zap all matching candies
+    for(let yy=0;yy<8;yy++)for(let xx=0;xx<8;xx++){const c=grid.get(xx,yy);if(c&&c.color===other.color&&renderer){const tp=renderer.canvasPos(xx,yy);emitZap(bp.px,bp.py,tp.px,tp.py,COLORS[other.color]);}}
+    grid.activateSpecial(bomb.x,bomb.y,other.color);playBomb();
+  }
 
   // Animate swap
   const fromA={x:a.animX,y:a.animY},fromB={x:b.animX,y:b.animY};
@@ -717,24 +787,46 @@ function processBoard(){
   const{specials,jellyCleared}=grid.processMatches(matches,scoring);
   objProgress+=jellyCleared;
   scoring.cascade++;
-  if(matches.length>=2)renderer.shakeScreen(4,0.2);
-  if(scoring.cascade>=3)shake(5,0.3);
+  if(matches.length>=2)
+  if(scoring.cascade>=3)
 
   // Cascade banner
   if(scoring.cascade===2)addPopup(canvas.width/2,80,'2x CASCADE!','#FF9900',22);
   else if(scoring.cascade===3)addPopup(canvas.width/2,80,'3x CASCADE!','#FF6600',28);
-  else if(scoring.cascade>=4){addPopup(canvas.width/2,80,scoring.cascade+'x INSANE!','#FF0066',34);shake(8,0.4);}
+  else if(scoring.cascade>=4){addPopup(canvas.width/2,80,scoring.cascade+'x INSANE!','#FF0066',34);}
 
-  // Flash matched candies
+  // Visual effects for matched candies
   matches.forEach(g=>g.candies.forEach(c=>{
     const pos=renderer.canvasPos(c.x,c.y);
-    emitBurst(pos.px,pos.py,COLORS[c.color]||'#fff',8);
-    addPopup(pos.px,pos.py-20,`+${Math.round(30*(1+scoring.cascade*.5))}`,'#FFD700');
+    emitBurst(pos.px,pos.py,COLORS[c.color]||'#fff',6);
+    // Trigger special candy effects
+    if(c.special==='striped_h'){
+      const cs=renderer.cellSize;
+      emitLineBlast(pos.px,pos.py,'h',COLORS[c.color]||'#fff',cs*8);
+      addPopup(pos.px,pos.py-20,'LINE!','#FF9900',16);
+    } else if(c.special==='striped_v'){
+      const cs=renderer.cellSize;
+      emitLineBlast(pos.px,pos.py,'v',COLORS[c.color]||'#fff',cs*8);
+      addPopup(pos.px,pos.py-20,'LINE!','#FF9900',16);
+    } else if(c.special==='wrapped'){
+      emitRing(pos.px,pos.py,COLORS[c.color]||'#fff');
+      addPopup(pos.px,pos.py-20,'BOOM!','#FF6600',20);
+    } else if(c.special==='colorbomb'){
+      for(let i=0;i<6;i++)emitBurst(pos.px,pos.py,COLORS[i],8);
+      addPopup(pos.px,pos.py-20,'RAINBOW!','#FF00FF',22);
+    } else {
+      addPopup(pos.px,pos.py-20,`+${Math.round(30*(1+scoring.cascade*.5))}`,'#FFD700');
+    }
   }));
 
-  // Sparkle on new specials
+  // Sparkle + zap effect on new specials being created
   if(specials.length>0)playSpecialCreate();
-  specials.forEach(s=>{const pos=renderer.canvasPos(s.x,s.y);emitBurst(pos.px,pos.py,'#FFD700',15);emitBurst(pos.px,pos.py,'#fff',8);});
+  specials.forEach(s=>{
+    const pos=renderer.canvasPos(s.x,s.y);
+    emitBurst(pos.px,pos.py,'#FFD700',15);
+    emitBurst(pos.px,pos.py,'#fff',10);
+    if(s.type==='colorbomb')for(let i=0;i<6;i++)emitBurst(pos.px,pos.py,COLORS[i],5);
+  });
   comboCount=scoring.cascade;
 
   // Shrink then remove
@@ -817,7 +909,7 @@ let last=0;
 function loop(ts){
   requestAnimationFrame(loop);
   const dt=Math.min((ts-last)/1000,.1);last=ts;
-  updateShake(dt);updateAnims(dt);updateParticles(dt);updatePopups(dt);
+  updateAnims(dt);updateParticles(dt);updatePopups(dt);
   // Hint timer
   if(state==='playing'&&!isAnimating){
     hintTimer+=dt;
@@ -825,7 +917,7 @@ function loop(ts){
   } else {hintTimer=0;}
   if(state==='playing')gameTime+=dt;
 
-  ctx.save();ctx.translate(shakeX,shakeY);
+  ctx.save();
   ctx.clearRect(0,0,canvas.width,canvas.height);
   const bg=ctx.createLinearGradient(0,0,0,canvas.height);
   bg.addColorStop(0,'#1a0533');bg.addColorStop(1,'#0d1b2a');
