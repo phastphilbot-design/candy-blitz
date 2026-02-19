@@ -453,7 +453,7 @@ function drawHUD(){
   const objTxt=currentLevel.objective==='score'?`Target: ${currentLevel.target}`:currentLevel.objective==='jelly'?`Jelly: ${grid.countJelly()}`:  `Collected: ${objProgress}/${currentLevel.ingredientCount}`;
   ctx.fillStyle='#aaa';ctx.font='11px system-ui';ctx.textAlign='center';ctx.fillText(objTxt,canvas.width/2,52);
   addBtn('⏸',canvas.width-52,8,44,44,'secondary',()=>{state='paused';clearBtns();});
-  if(audio&&!muted)addBtn('🔊',canvas.width-104,8,44,44,'secondary',()=>{muted=true;});
+  if(!muted)addBtn('🔊',canvas.width-104,8,44,44,'secondary',()=>{muted=true;});
   else addBtn('🔇',canvas.width-104,8,44,44,'secondary',()=>{muted=false;});
   drawBtns();
 }
