@@ -37,7 +37,8 @@ function lighten(hex,a){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice
 function rrect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.arcTo(x+w,y,x+w,y+r,r);c.lineTo(x+w,y+h-r);c.arcTo(x+w,y+h,x+w-r,y+h,r);c.lineTo(x+r,y+h);c.arcTo(x,y+h,x,y+h-r,r);c.lineTo(x,y+r);c.arcTo(x,y,x+r,y,r);c.closePath();}
 
 // ── AUDIO ──
-let audioCtx=null, masterGain=null, muted=false;
+let audioCtx=null, masterGain=null, muted=!!(localStorage.getItem('cb_muted')==='1');
+let hintTimer=0, hintMove=null, comboCount=0, gameTime=0;
 function initAudio(){if(audioCtx)return;audioCtx=new(window.AudioContext||window.webkitAudioContext)();masterGain=audioCtx.createGain();masterGain.connect(audioCtx.destination);}
 function osc(type,freq,vol,start,dur){if(!audioCtx||muted)return;const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.setValueAtTime(freq,start);g.gain.setValueAtTime(0.001,start);g.gain.linearRampToValueAtTime(vol,start+0.01);g.gain.exponentialRampToValueAtTime(0.001,start+dur);o.connect(g);g.connect(masterGain);o.start(start);o.stop(start+dur+0.02);}
 function playSwap(){if(!audioCtx)return;const t=audioCtx.currentTime;const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='sine';o.frequency.setValueAtTime(900,t);o.frequency.exponentialRampToValueAtTime(420,t+0.09);g.gain.setValueAtTime(0.25,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.11);o.connect(g);g.connect(masterGain);o.start(t);o.stop(t+0.13);}
@@ -48,6 +49,26 @@ function playLose(){if(!audioCtx)return;const t=audioCtx.currentTime;[392,330,29
 function playCascade(lvl){if(!audioCtx)return;const t=audioCtx.currentTime;const base=262*(1+lvl*0.15);[base,base*1.25,base*1.5].forEach((f,i)=>osc('triangle',f,0.15,t+i*0.07,0.12));}
 function playBomb(){if(!audioCtx)return;const t=audioCtx.currentTime;const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='sine';o.frequency.setValueAtTime(80,t);o.frequency.exponentialRampToValueAtTime(35,t+0.3);o.frequency.exponentialRampToValueAtTime(300,t+0.7);g.gain.setValueAtTime(0.5,t);g.gain.exponentialRampToValueAtTime(0.001,t+1.0);o.connect(g);g.connect(masterGain);o.start(t);o.stop(t+1.1);}
 function playClick(){if(!audioCtx)return;osc('sine',1200,0.15,audioCtx.currentTime,0.04);}
+function playHint(){if(!audioCtx)return;const t=audioCtx.currentTime;osc('sine',880,0.08,t,0.08);osc('sine',1100,0.08,t+0.1,0.08);}
+function playShuffle(){if(!audioCtx)return;const t=audioCtx.currentTime;for(let i=0;i<6;i++)osc('triangle',200+i*80,0.1,t+i*0.04,0.06);}
+function playSpecialCreate(){if(!audioCtx)return;const t=audioCtx.currentTime;[523,659,784,1047].forEach((f,i)=>osc('sine',f,0.12,t+i*0.05,0.1));}
+function playLowMoves(){if(!audioCtx)return;osc('square',330,0.06,audioCtx.currentTime,0.08);}
+
+// ── HINT SYSTEM ──
+function findHint(){
+  if(!grid)return null;
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++){
+    const dirs=[[1,0],[0,1]];
+    for(const[dx,dy]of dirs){
+      const nx=x+dx,ny=y+dy;if(nx>=8||ny>=8)continue;
+      const a=grid.get(x,y),b=grid.get(nx,ny);
+      if(!a||!b||a.blocker||b.blocker||a.locked||b.locked)continue;
+      grid.swap(x,y,nx,ny);const ok=grid.findMatches().length>0;grid.swap(nx,ny,x,y);
+      if(ok)return{x1:x,y1:y,x2:nx,y2:ny};
+    }
+  }
+  return null;
+}
 
 // ── EASING ──
 function easeOut(t){return 1-Math.pow(1-t,3);}
@@ -68,9 +89,9 @@ function updateAnims(dt){for(let i=anims.length-1;i>=0;i--){const a=anims[i];a.t
 
 // ── SCORE POPUPS ──
 const popups=[];
-function addPopup(x,y,text,color='#FFD700'){popups.push({x,y,text,color,life:1,vy:-1.5});}
+function addPopup(x,y,text,color='#FFD700',size=18){popups.push({x,y,text,color,life:1,vy:-1.5,size});}
 function updatePopups(dt){for(let i=popups.length-1;i>=0;i--){const p=popups[i];p.y+=p.vy*dt*60;p.life-=0.02*dt*60;if(p.life<=0)popups.splice(i,1);}}
-function drawPopups(){popups.forEach(p=>{ctx.save();ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.font='bold 18px system-ui';ctx.textAlign='center';ctx.strokeStyle='#000';ctx.lineWidth=3;ctx.strokeText(p.text,p.x,p.y);ctx.fillText(p.text,p.x,p.y);ctx.restore();});}
+function drawPopups(){popups.forEach(p=>{ctx.save();ctx.globalAlpha=p.life;ctx.fillStyle=p.color;const sz=p.size||18;ctx.font=`bold ${sz}px system-ui`;ctx.textAlign='center';ctx.strokeStyle='#000';ctx.lineWidth=Math.max(2,sz*.15);ctx.strokeText(p.text,p.x,p.y);ctx.fillText(p.text,p.x,p.y);ctx.restore();});}
 
 // ── SHAKE ──
 let shakeX=0,shakeY=0,shakeDur=0,shakeInt=0;
@@ -243,6 +264,14 @@ class Grid{
 
   countJelly(){let t=0;for(let y=0;y<this.rows;y++)for(let x=0;x<this.cols;x++){const c=this.cells[y][x];if(c)t+=c.jelly;}return t;}
 
+  shuffle(){
+    const candies=[];
+    for(let y=0;y<this.rows;y++)for(let x=0;x<this.cols;x++){const c=this.cells[y][x];if(c&&!c.blocker&&!c.chocolate&&!c.locked)candies.push(c);}
+    for(let i=candies.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const tc=candies[i].color;candies[i].color=candies[j].color;candies[j].color=tc;const ts=candies[i].special;candies[i].special=candies[j].special;candies[j].special=ts;}
+    let n=30;while(this.findMatches().length>0&&n-->0){for(const c of candies)c.color=this._rand();}
+    playShuffle();addPopup(canvas.width/2,canvas.height/2,'SHUFFLE!','#9B59B6');
+  }
+
   spreadChocolate(){
     const newC=[];
     for(let y=0;y<this.rows;y++)for(let x=0;x<this.cols;x++){const c=this.cells[y][x];if(c&&c.chocolate){const dirs=[[1,0],[-1,0],[0,1],[0,-1]].sort(()=>Math.random()-0.5);for(const[dx,dy]of dirs){const nb=this.get(x+dx,y+dy);if(nb&&!nb.blocker&&!nb.chocolate){newC.push({x:x+dx,y:y+dy});break;}}}}
@@ -324,7 +353,17 @@ class Renderer{
         ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=3;ctx.stroke();
         ctx.restore();
       }
-      this.drawCandy(ctx,c,px,py,(c.scale||1),(c.alpha===undefined?1:c.alpha));
+      // Hint glow (pulsing green)
+      if(hintMove&&!isAnimating&&((c.x===hintMove.x1&&c.y===hintMove.y1)||(c.x===hintMove.x2&&c.y===hintMove.y2))){
+        const pulse=0.4+0.4*Math.sin(Date.now()*0.006);
+        ctx.save();ctx.shadowColor='#2ECC71';ctx.shadowBlur=cs*.5*pulse;
+        ctx.beginPath();ctx.arc(px,py,(cs/2-1)*(c.scale||1),0,Math.PI*2);
+        ctx.strokeStyle=`rgba(46,204,113,${pulse})`;ctx.lineWidth=3;ctx.stroke();
+        ctx.restore();
+      }
+      // Pulsing glow on specials
+      const scaleBonus=(c.special!=='none'&&c.special!==undefined)?0.03*Math.sin(Date.now()*0.005+c.x*2+c.y*3):0;
+      this.drawCandy(ctx,c,px,py,(c.scale||1)+scaleBonus,(c.alpha===undefined?1:c.alpha));
     }
     ctx.restore();
   }
@@ -386,34 +425,40 @@ const scoring={total:0,cascade:0,add(pts){const p=Math.round(pts*(1+this.cascade
 function loadProgress(){try{unlockedLevels=parseInt(localStorage.getItem('cb_unlock')||'1');levelStars=JSON.parse(localStorage.getItem('cb_stars')||'{}');}catch{}}
 function saveProgress(id,stars){try{if(id+1>unlockedLevels){unlockedLevels=id+1;localStorage.setItem('cb_unlock',unlockedLevels);}if(!levelStars[id]||stars>levelStars[id]){levelStars[id]=stars;localStorage.setItem('cb_stars',JSON.stringify(levelStars));}}catch{}}
 
-// ── SAVE / RESUME ──
-function saveGame(){
+// ── SAVE / RESUME (3 SLOTS) ──
+let activeSlot=0;
+function slotKey(n){return 'cb_slot'+n;}
+function saveGame(slot){
   if(!currentLevel||!grid||state!=='playing')return;
+  const s=slot!==undefined?slot:activeSlot;
   try{
     const cells=[];
     for(let y=0;y<8;y++)for(let x=0;x<8;x++){const c=grid.cells[y][x];cells.push(c?{col:c.color,sp:c.special,bl:c.blocker?1:0,ch:c.chocolate?1:0,lk:c.locked?1:0,jl:c.jelly}:null);}
-    localStorage.setItem('cb_save',JSON.stringify({id:currentLevel.id,mv:movesLeft,sc:scoring.total,obj:objProgress,cells}));
+    localStorage.setItem(slotKey(s),JSON.stringify({id:currentLevel.id,name:currentLevel.name,mv:movesLeft,sc:scoring.total,obj:objProgress,ts:Date.now(),cells}));
   }catch(e){}
 }
-function hasSave(levelId){try{const s=JSON.parse(localStorage.getItem('cb_save')||'null');return!!(s&&s.id===levelId);}catch{return false;}}
-function clearSave(){try{localStorage.removeItem('cb_save');}catch{}}
-function resumeGame(){
+function getSlot(n){try{return JSON.parse(localStorage.getItem(slotKey(n))||'null');}catch{return null;}}
+function hasSave(levelId){for(let i=0;i<3;i++){const s=getSlot(i);if(s&&s.id===levelId)return i;}return -1;}
+function clearSave(slot){try{localStorage.removeItem(slotKey(slot!==undefined?slot:activeSlot));}catch{}}
+function resumeGame(slot){
+  const s=slot!==undefined?slot:activeSlot;
   try{
-    const s=JSON.parse(localStorage.getItem('cb_save'));
-    if(!s||s.id!==currentLevel.id)return false;
-    movesLeft=s.mv;scoring.total=s.sc;scoring.cascade=0;objProgress=s.obj||0;
+    const d=getSlot(s);
+    if(!d||d.id!==currentLevel.id)return false;
+    movesLeft=d.mv;scoring.total=d.sc;scoring.cascade=0;objProgress=d.obj||0;
     for(let y=0;y<8;y++)for(let x=0;x<8;x++){
-      const d=s.cells[y*8+x];
-      if(!d){grid.cells[y][x]=null;continue;}
-      const c=new Candy(x,y,d.col,d.sp||'none');
-      c.blocker=!!d.bl;c.chocolate=!!d.ch;c.locked=!!d.lk;c.jelly=d.jl||0;
+      const c2=d.cells[y*8+x];
+      if(!c2){grid.cells[y][x]=null;continue;}
+      const c=new Candy(x,y,c2.col,c2.sp||'none');
+      c.blocker=!!c2.bl;c.chocolate=!!c2.ch;c.locked=!!c2.lk;c.jelly=c2.jl||0;
       grid.cells[y][x]=c;
     }
     return true;
   }catch(e){return false;}
 }
-window.addEventListener('blur',saveGame);
-window.addEventListener('pagehide',saveGame);
+function listSaves(){return[0,1,2].map(i=>getSlot(i));}
+window.addEventListener('blur',()=>saveGame());
+window.addEventListener('pagehide',()=>saveGame());
 
 // ── BUTTONS ──
 function clearBtns(){activeButtons=[];}
@@ -459,17 +504,38 @@ function drawStart(){
   clearBtns();
   const{cx,px,py,pw,ph}=drawPanel(`Level ${currentLevel.id}`,currentLevel.name);
   const obj=currentLevel.objective==='score'?`Score ${currentLevel.target} pts`:currentLevel.objective==='jelly'?`Clear all jelly (${currentLevel.target} layers)`:`Collect ${currentLevel.ingredientCount} ingredients`;
-  ctx.fillStyle='#FFD700';ctx.font=`bold ${Math.round(pw*.07)}px system-ui`;ctx.textAlign='center';ctx.fillText(obj,cx,py+ph*.5);
-  ctx.fillStyle='#aaa';ctx.font=`${Math.round(pw*.06)}px system-ui`;ctx.fillText(`${currentLevel.moves} moves`,cx,py+ph*.62);
-  const bh2=44,bw2=pw*.44;
-  const hasSv=hasSave(currentLevel.id);
-  if(hasSv){
-    addBtn('Continue ▶',cx-bw2/2,py+ph*.68,bw2,bh2,'primary',()=>{startGame(true);});
-    addBtn('New Game',cx-bw2/2,py+ph*.82,bw2,bh2,'secondary',()=>{startGame(false);});
+  ctx.fillStyle='#FFD700';ctx.font=`bold ${Math.round(pw*.07)}px system-ui`;ctx.textAlign='center';ctx.fillText(obj,cx,py+ph*.38);
+  ctx.fillStyle='#aaa';ctx.font=`${Math.round(pw*.06)}px system-ui`;ctx.fillText(`${currentLevel.moves} moves`,cx,py+ph*.48);
+  const bh2=38,bw2=pw*.42;
+
+  // Check for saves on this level
+  const saves=listSaves();
+  const matchingSlots=saves.map((s,i)=>s&&s.id===currentLevel.id?i:-1).filter(i=>i>=0);
+
+  if(matchingSlots.length>0){
+    ctx.fillStyle='#9B59B6';ctx.font=`bold ${Math.round(pw*.055)}px system-ui`;
+    ctx.fillText('Saved Games:',cx,py+ph*.57);
+    matchingSlots.forEach((slot,idx)=>{
+      const s=saves[slot];
+      const ago=Math.round((Date.now()-s.ts)/60000);
+      const label=`Slot ${slot+1}: ${s.mv} moves, ${s.sc} pts (${ago<60?ago+'m':Math.round(ago/60)+'h'} ago)`;
+      addBtn(label,px+12,py+ph*(.63+idx*.08),pw-24,bh2-4,'primary',()=>{activeSlot=slot;startGame(true);});
+    });
+    addBtn('▶ New Game',cx-bw2/2,py+ph*(.63+matchingSlots.length*.08+.02),bw2,bh2,'secondary',()=>{activeSlot=(matchingSlots[matchingSlots.length-1]+1)%3;startGame(false);});
   } else {
-    addBtn('▶ PLAY',cx-bw2/2,py+ph*.77,bw2,bh2,'primary',()=>{startGame(false);});
+    addBtn('▶ PLAY',cx-bw2/2,py+ph*.6,bw2,bh2,'primary',()=>{activeSlot=0;startGame(false);});
   }
-  addBtn('◀ Back',px+8,py+ph*.77,pw*.38,bh2,'secondary',()=>{state='map';clearBtns();});
+
+  // Show all 3 save slots summary
+  ctx.fillStyle='#555';ctx.font=`${Math.round(pw*.04)}px system-ui`;
+  ctx.fillText('Save Slots:',cx,py+ph*.88);
+  for(let i=0;i<3;i++){
+    const s=saves[i];
+    const txt=s?`${i+1}: Lv${s.id} ${s.mv}mv ${s.sc}pts`:`${i+1}: Empty`;
+    ctx.fillStyle=s?'#888':'#444';ctx.fillText(txt,px+pw*(i+1)/4,py+ph*.93);
+  }
+
+  addBtn('◀ Back',px+8,py+ph*.77,pw*.3,bh2,'secondary',()=>{state='map';clearBtns();});
   drawBtns();
 }
 
@@ -478,34 +544,72 @@ function startGame(resume=false){
   renderer=new Renderer(canvas,grid);
   scoring.reset();movesLeft=currentLevel.moves;
   isAnimating=false;selectedCandy=null;objProgress=0;ingredientsCollected=0;
-  if(resume)resumeGame();
-  else clearSave();
+  hintTimer=0;hintMove=null;comboCount=0;gameTime=0;
+  if(resume)resumeGame(activeSlot);
+  else clearSave(activeSlot);
   state='playing';playClick();
 }
 
 // ── PLAYING HUD ──
 function drawHUD(){
   clearBtns();
-  ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,canvas.width,60);
-  ctx.fillStyle='#FFD700';ctx.font='bold 22px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(scoring.total,canvas.width/2,30);
-  ctx.fillStyle='#fff';ctx.font='bold 18px system-ui';ctx.textAlign='left';ctx.fillText(`⬡ ${movesLeft}`,14,30);
+  // HUD bar
+  ctx.fillStyle='rgba(0,0,0,.65)';ctx.fillRect(0,0,canvas.width,60);
+  // Score
+  ctx.fillStyle='#FFD700';ctx.font='bold 22px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(scoring.total,canvas.width/2,22);
+  // Moves (pulse red when <=5)
+  if(movesLeft<=5){
+    const pulse=0.5+0.5*Math.sin(Date.now()*0.008);
+    ctx.fillStyle=`rgba(231,76,60,${0.5+pulse*0.5})`;
+    ctx.font=`bold ${18+pulse*3}px system-ui`;
+  } else {
+    ctx.fillStyle='#fff';ctx.font='bold 18px system-ui';
+  }
+  ctx.textAlign='left';ctx.fillText(`⬡ ${movesLeft}`,14,24);
+  // Objective
   const objTxt=currentLevel.objective==='score'?`Target: ${currentLevel.target}`:currentLevel.objective==='jelly'?`Jelly: ${grid.countJelly()}`:  `Collected: ${objProgress}/${currentLevel.ingredientCount}`;
-  ctx.fillStyle='#aaa';ctx.font='11px system-ui';ctx.textAlign='center';ctx.fillText(objTxt,canvas.width/2,52);
+  ctx.fillStyle='#aaa';ctx.font='11px system-ui';ctx.textAlign='center';ctx.fillText(objTxt,canvas.width/2,45);
+  // Combo counter
+  if(comboCount>=2){
+    const pulse=0.7+0.3*Math.sin(Date.now()*0.01);
+    ctx.fillStyle=comboCount>=5?`rgba(255,0,102,${pulse})`:comboCount>=3?`rgba(255,102,0,${pulse})`:`rgba(255,153,0,${pulse})`;
+    ctx.font=`bold ${12+comboCount}px system-ui`;ctx.textAlign='left';
+    ctx.fillText(`${comboCount}x COMBO`,14,50);
+  }
+  // Level name
+  ctx.fillStyle='#666';ctx.font='10px system-ui';ctx.textAlign='right';ctx.fillText(`Lv${currentLevel.id}`,canvas.width-114,52);
+  // Buttons
   addBtn('⏸',canvas.width-52,8,44,44,'secondary',()=>{state='paused';saveGame();clearBtns();});
-  if(!muted)addBtn('🔊',canvas.width-104,8,44,44,'secondary',()=>{muted=true;});
-  else addBtn('🔇',canvas.width-104,8,44,44,'secondary',()=>{muted=false;});
+  if(!muted)addBtn('🔊',canvas.width-104,8,44,44,'secondary',()=>{muted=true;localStorage.setItem('cb_muted','1');});
+  else addBtn('🔇',canvas.width-104,8,44,44,'secondary',()=>{muted=false;localStorage.setItem('cb_muted','0');});
   drawBtns();
 }
 
 // ── COMPLETE ──
+let completeAnimT=0;
 function drawComplete(){
   clearBtns();
   renderer.drawGrid(grid);
+  completeAnimT+=0.016;
   const{cx,px,py,pw,ph}=drawPanel('Level Complete! 🎉',`Score: ${completionScore}`);
-  const sr=26;[-1,0,1].forEach((i,idx)=>drawStar(cx+i*70,py+ph*.52,sr,idx<completionStars));
+  // Time display
+  const mins=Math.floor(gameTime/60),secs=Math.floor(gameTime%60);
+  ctx.fillStyle='#888';ctx.font=`${Math.round(pw*.05)}px system-ui`;ctx.textAlign='center';
+  ctx.fillText(`Time: ${mins}:${secs<10?'0':''}${secs}`,cx,py+ph*.44);
+  // Animated stars (pop in sequence)
+  const sr=26;
+  [-1,0,1].forEach((i,idx)=>{
+    const delay=idx*0.3;
+    const t=Math.max(0,Math.min(1,(completeAnimT-delay)/0.4));
+    if(t>0){
+      const s=idx<completionStars?easeOutBounce(t):t;
+      const r2=sr*s;
+      drawStar(cx+i*70,py+ph*.54,r2,idx<completionStars);
+    }
+  });
   const bw2=pw*.44,bh2=44,by2=py+ph*.77;
-  if(currentLevel.id<100)addBtn('Next ▶',cx,by2,bw2,bh2,'primary',()=>{currentLevel=LEVELS[currentLevel.id];state='start';clearBtns();playClick();});
-  addBtn('◀ Map',px+8,by2,pw*.38,bh2,'secondary',()=>{state='map';clearBtns();});
+  if(currentLevel.id<100)addBtn('Next ▶',cx,by2,bw2,bh2,'primary',()=>{completeAnimT=0;currentLevel=LEVELS[currentLevel.id];state='start';clearBtns();playClick();});
+  addBtn('◀ Map',px+8,by2,pw*.38,bh2,'secondary',()=>{completeAnimT=0;state='map';clearBtns();});
   drawBtns();
 }
 
@@ -525,10 +629,18 @@ function drawPaused(){
   clearBtns();
   renderer.drawGrid(grid);
   const{cx,px,py,pw,ph}=drawPanel('Paused ⏸','');
-  const bw2=pw*.6,bh2=44,bx2=cx-bw2/2;
-  addBtn('▶ Resume',bx2,py+ph*.4,bw2,bh2,'primary',()=>{state='playing';playClick();});
-  addBtn('↺ Restart',bx2,py+ph*.56,bw2,bh2,'secondary',()=>{clearSave();startGame(false);playClick();});
-  addBtn('◀ Quit',bx2,py+ph*.72,bw2,bh2,'danger',()=>{state='map';clearBtns();});
+  const bw2=pw*.6,bh2=38,bx2=cx-bw2/2;
+  addBtn('▶ Resume',bx2,py+ph*.28,bw2,bh2,'primary',()=>{state='playing';playClick();});
+  // Save to specific slots
+  ctx.fillStyle='#888';ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillText('Save to slot:',cx,py+ph*.44);
+  const slotW=(pw-30)/3;
+  for(let i=0;i<3;i++){
+    const s=getSlot(i);
+    const label=s?`Slot ${i+1} ✓`:`Slot ${i+1}`;
+    addBtn(label,px+10+i*(slotW+5),py+ph*.47,slotW,bh2-6,activeSlot===i?'primary':'secondary',()=>{activeSlot=i;saveGame(i);addPopup(canvas.width/2,canvas.height/2,'Saved!','#2ECC71');playClick();});
+  }
+  addBtn('↺ Restart',bx2,py+ph*.62,bw2,bh2,'secondary',()=>{clearSave(activeSlot);startGame(false);playClick();});
+  addBtn('◀ Quit & Save',bx2,py+ph*.75,bw2,bh2,'danger',()=>{saveGame();state='map';clearBtns();});
   drawBtns();
 }
 
@@ -544,6 +656,7 @@ function trySwap(x1,y1,x2,y2){
   // ── Special + Special combos ──
   if(a.special!=='none'&&b.special!=='none'){
     movesLeft--;scoring.cascade=0;isAnimating=true;
+    hintTimer=0;hintMove=null;comboCount=0;
     const sa=a.special,sb=b.special,cx=a.x,cy=a.y;
     playBomb();shake(10,0.6);
     if(sa==='colorbomb'&&sb==='colorbomb'){
@@ -575,6 +688,7 @@ function trySwap(x1,y1,x2,y2){
 
   if(!isColorBomb&&matches.length===0){grid.swap(x2,y2,x1,y1);playBad();return;}
   movesLeft--;scoring.cascade=0;playSwap();isAnimating=true;
+  hintTimer=0;hintMove=null;comboCount=0;
   if(movesLeft%3===0)saveGame();
 
   if(isColorBomb){const bomb=a.special==='colorbomb'?a:b,other=a.special==='colorbomb'?b:a;grid.activateSpecial(bomb.x,bomb.y,other.color);playBomb();}
@@ -607,9 +721,9 @@ function processBoard(){
   if(scoring.cascade>=3)shake(5,0.3);
 
   // Cascade banner
-  if(scoring.cascade===2)addPopup(canvas.width/2,80,'2x CASCADE!','#FF9900');
-  else if(scoring.cascade===3)addPopup(canvas.width/2,80,'3x CASCADE!','#FF6600');
-  else if(scoring.cascade>=4)addPopup(canvas.width/2,80,scoring.cascade+'x INSANE!','#FF0066');
+  if(scoring.cascade===2)addPopup(canvas.width/2,80,'2x CASCADE!','#FF9900',22);
+  else if(scoring.cascade===3)addPopup(canvas.width/2,80,'3x CASCADE!','#FF6600',28);
+  else if(scoring.cascade>=4){addPopup(canvas.width/2,80,scoring.cascade+'x INSANE!','#FF0066',34);shake(8,0.4);}
 
   // Flash matched candies
   matches.forEach(g=>g.candies.forEach(c=>{
@@ -619,7 +733,9 @@ function processBoard(){
   }));
 
   // Sparkle on new specials
+  if(specials.length>0)playSpecialCreate();
   specials.forEach(s=>{const pos=renderer.canvasPos(s.x,s.y);emitBurst(pos.px,pos.py,'#FFD700',15);emitBurst(pos.px,pos.py,'#fff',8);});
+  comboCount=scoring.cascade;
 
   // Shrink then remove
   let prog=0;
@@ -702,6 +818,12 @@ function loop(ts){
   requestAnimationFrame(loop);
   const dt=Math.min((ts-last)/1000,.1);last=ts;
   updateShake(dt);updateAnims(dt);updateParticles(dt);updatePopups(dt);
+  // Hint timer
+  if(state==='playing'&&!isAnimating){
+    hintTimer+=dt;
+    if(hintTimer>5&&!hintMove){hintMove=findHint();if(hintMove)playHint();}
+  } else {hintTimer=0;}
+  if(state==='playing')gameTime+=dt;
 
   ctx.save();ctx.translate(shakeX,shakeY);
   ctx.clearRect(0,0,canvas.width,canvas.height);
