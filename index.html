@@ -317,6 +317,13 @@ class Renderer{
       if(c.jelly>0){ctx.fillStyle=c.jelly>=2?'rgba(100,200,255,0.4)':'rgba(100,200,255,0.25)';rrect(ctx,ox+x*cs+1,oy+y*cs+1,cs-2,cs-2,4);ctx.fill();}
       const px=ox+x*cs+cs/2+(c.animX||0)*cs;
       const py=oy+y*cs+cs/2+(c.animY||0)*cs;
+      // Selected glow
+      if(selectedCandy&&selectedCandy===c){
+        ctx.save();ctx.shadowColor='#fff';ctx.shadowBlur=cs*.4;
+        ctx.beginPath();ctx.arc(px,py,(cs/2-2)*(c.scale||1),0,Math.PI*2);
+        ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=3;ctx.stroke();
+        ctx.restore();
+      }
       this.drawCandy(ctx,c,px,py,(c.scale||1),(c.alpha===undefined?1:c.alpha));
     }
     ctx.restore();
@@ -379,6 +386,35 @@ const scoring={total:0,cascade:0,add(pts){const p=Math.round(pts*(1+this.cascade
 function loadProgress(){try{unlockedLevels=parseInt(localStorage.getItem('cb_unlock')||'1');levelStars=JSON.parse(localStorage.getItem('cb_stars')||'{}');}catch{}}
 function saveProgress(id,stars){try{if(id+1>unlockedLevels){unlockedLevels=id+1;localStorage.setItem('cb_unlock',unlockedLevels);}if(!levelStars[id]||stars>levelStars[id]){levelStars[id]=stars;localStorage.setItem('cb_stars',JSON.stringify(levelStars));}}catch{}}
 
+// ── SAVE / RESUME ──
+function saveGame(){
+  if(!currentLevel||!grid||state!=='playing')return;
+  try{
+    const cells=[];
+    for(let y=0;y<8;y++)for(let x=0;x<8;x++){const c=grid.cells[y][x];cells.push(c?{col:c.color,sp:c.special,bl:c.blocker?1:0,ch:c.chocolate?1:0,lk:c.locked?1:0,jl:c.jelly}:null);}
+    localStorage.setItem('cb_save',JSON.stringify({id:currentLevel.id,mv:movesLeft,sc:scoring.total,obj:objProgress,cells}));
+  }catch(e){}
+}
+function hasSave(levelId){try{const s=JSON.parse(localStorage.getItem('cb_save')||'null');return!!(s&&s.id===levelId);}catch{return false;}}
+function clearSave(){try{localStorage.removeItem('cb_save');}catch{}}
+function resumeGame(){
+  try{
+    const s=JSON.parse(localStorage.getItem('cb_save'));
+    if(!s||s.id!==currentLevel.id)return false;
+    movesLeft=s.mv;scoring.total=s.sc;scoring.cascade=0;objProgress=s.obj||0;
+    for(let y=0;y<8;y++)for(let x=0;x<8;x++){
+      const d=s.cells[y*8+x];
+      if(!d){grid.cells[y][x]=null;continue;}
+      const c=new Candy(x,y,d.col,d.sp||'none');
+      c.blocker=!!d.bl;c.chocolate=!!d.ch;c.locked=!!d.lk;c.jelly=d.jl||0;
+      grid.cells[y][x]=c;
+    }
+    return true;
+  }catch(e){return false;}
+}
+window.addEventListener('blur',saveGame);
+window.addEventListener('pagehide',saveGame);
+
 // ── BUTTONS ──
 function clearBtns(){activeButtons=[];}
 function addBtn(label,x,y,w,h,style,cb){activeButtons.push({label,x,y,w,h,style,cb});}
@@ -425,17 +461,25 @@ function drawStart(){
   const obj=currentLevel.objective==='score'?`Score ${currentLevel.target} pts`:currentLevel.objective==='jelly'?`Clear all jelly (${currentLevel.target} layers)`:`Collect ${currentLevel.ingredientCount} ingredients`;
   ctx.fillStyle='#FFD700';ctx.font=`bold ${Math.round(pw*.07)}px system-ui`;ctx.textAlign='center';ctx.fillText(obj,cx,py+ph*.5);
   ctx.fillStyle='#aaa';ctx.font=`${Math.round(pw*.06)}px system-ui`;ctx.fillText(`${currentLevel.moves} moves`,cx,py+ph*.62);
-  const bw2=pw*.44,bh2=44;
-  addBtn('▶ PLAY',cx-bw2/2,py+ph*.77,bw2,bh2,'primary',()=>{startGame();});
+  const bh2=44,bw2=pw*.44;
+  const hasSv=hasSave(currentLevel.id);
+  if(hasSv){
+    addBtn('Continue ▶',cx-bw2/2,py+ph*.68,bw2,bh2,'primary',()=>{startGame(true);});
+    addBtn('New Game',cx-bw2/2,py+ph*.82,bw2,bh2,'secondary',()=>{startGame(false);});
+  } else {
+    addBtn('▶ PLAY',cx-bw2/2,py+ph*.77,bw2,bh2,'primary',()=>{startGame(false);});
+  }
   addBtn('◀ Back',px+8,py+ph*.77,pw*.38,bh2,'secondary',()=>{state='map';clearBtns();});
   drawBtns();
 }
 
-function startGame(){
+function startGame(resume=false){
   grid=new Grid(8,8);grid.init(currentLevel);
   renderer=new Renderer(canvas,grid);
   scoring.reset();movesLeft=currentLevel.moves;
   isAnimating=false;selectedCandy=null;objProgress=0;ingredientsCollected=0;
+  if(resume)resumeGame();
+  else clearSave();
   state='playing';playClick();
 }
 
@@ -447,7 +491,7 @@ function drawHUD(){
   ctx.fillStyle='#fff';ctx.font='bold 18px system-ui';ctx.textAlign='left';ctx.fillText(`⬡ ${movesLeft}`,14,30);
   const objTxt=currentLevel.objective==='score'?`Target: ${currentLevel.target}`:currentLevel.objective==='jelly'?`Jelly: ${grid.countJelly()}`:  `Collected: ${objProgress}/${currentLevel.ingredientCount}`;
   ctx.fillStyle='#aaa';ctx.font='11px system-ui';ctx.textAlign='center';ctx.fillText(objTxt,canvas.width/2,52);
-  addBtn('⏸',canvas.width-52,8,44,44,'secondary',()=>{state='paused';clearBtns();});
+  addBtn('⏸',canvas.width-52,8,44,44,'secondary',()=>{state='paused';saveGame();clearBtns();});
   if(!muted)addBtn('🔊',canvas.width-104,8,44,44,'secondary',()=>{muted=true;});
   else addBtn('🔇',canvas.width-104,8,44,44,'secondary',()=>{muted=false;});
   drawBtns();
@@ -483,7 +527,7 @@ function drawPaused(){
   const{cx,px,py,pw,ph}=drawPanel('Paused ⏸','');
   const bw2=pw*.6,bh2=44,bx2=cx-bw2/2;
   addBtn('▶ Resume',bx2,py+ph*.4,bw2,bh2,'primary',()=>{state='playing';playClick();});
-  addBtn('↺ Restart',bx2,py+ph*.56,bw2,bh2,'secondary',()=>{startGame();playClick();});
+  addBtn('↺ Restart',bx2,py+ph*.56,bw2,bh2,'secondary',()=>{clearSave();startGame(false);playClick();});
   addBtn('◀ Quit',bx2,py+ph*.72,bw2,bh2,'danger',()=>{state='map';clearBtns();});
   drawBtns();
 }
@@ -497,12 +541,41 @@ function trySwap(x1,y1,x2,y2){
   if(!a||!b||!grid.isAdjacent(x1,y1,x2,y2)||a.blocker||b.blocker)return;
   if(a.locked||b.locked){playBad();return;}
 
+  // ── Special + Special combos ──
+  if(a.special!=='none'&&b.special!=='none'){
+    movesLeft--;scoring.cascade=0;isAnimating=true;
+    const sa=a.special,sb=b.special,cx=a.x,cy=a.y;
+    playBomb();shake(10,0.6);
+    if(sa==='colorbomb'&&sb==='colorbomb'){
+      for(let y=0;y<8;y++)for(let x=0;x<8;x++){const c=grid.get(x,y);if(c&&!c.blocker)c.matched=true;}
+    } else if(sa==='colorbomb'||sb==='colorbomb'){
+      const other=sa==='colorbomb'?b:a;
+      for(let y=0;y<8;y++)for(let x=0;x<8;x++){const c=grid.get(x,y);if(c&&!c.blocker&&c.color===other.color){c.special=other.special;grid.activateSpecial(x,y,other.color);}}
+      a.matched=true;b.matched=true;
+    } else if(sa==='wrapped'&&sb==='wrapped'){
+      for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const c=grid.get(cx+dx,cy+dy);if(c&&!c.blocker)c.matched=true;}
+    } else if((sa.includes('striped')&&sb==='wrapped')||(sa==='wrapped'&&sb.includes('striped'))){
+      for(let dy=-1;dy<=1;dy++)if(cy+dy>=0&&cy+dy<8)for(let x=0;x<8;x++){const c=grid.get(x,cy+dy);if(c&&!c.blocker)c.matched=true;}
+      for(let dx=-1;dx<=1;dx++)if(cx+dx>=0&&cx+dx<8)for(let y=0;y<8;y++){const c=grid.get(cx+dx,y);if(c&&!c.blocker)c.matched=true;}
+    } else {
+      for(let x=0;x<8;x++){const c=grid.get(x,cy);if(c&&!c.blocker)c.matched=true;}
+      for(let y=0;y<8;y++){const c=grid.get(cx,y);if(c&&!c.blocker)c.matched=true;}
+    }
+    const pp=renderer.canvasPos(cx,cy);
+    for(let i=0;i<6;i++)emitBurst(pp.px+(Math.random()-.5)*120,pp.py+(Math.random()-.5)*120,COLORS[Math.floor(Math.random()*6)],20);
+    emitConfetti(pp.px,pp.py,25);
+    addPopup(canvas.width/2,canvas.height/2-40,'COMBO!','#FFD700');
+    setTimeout(()=>processBoard(),200);
+    return;
+  }
+
   grid.swap(x1,y1,x2,y2);
   const isColorBomb=a.special==='colorbomb'||b.special==='colorbomb';
   const matches=grid.findMatches();
 
   if(!isColorBomb&&matches.length===0){grid.swap(x2,y2,x1,y1);playBad();return;}
   movesLeft--;scoring.cascade=0;playSwap();isAnimating=true;
+  if(movesLeft%3===0)saveGame();
 
   if(isColorBomb){const bomb=a.special==='colorbomb'?a:b,other=a.special==='colorbomb'?b:a;grid.activateSpecial(bomb.x,bomb.y,other.color);playBomb();}
 
@@ -531,6 +604,12 @@ function processBoard(){
   objProgress+=jellyCleared;
   scoring.cascade++;
   if(matches.length>=2)renderer.shakeScreen(4,0.2);
+  if(scoring.cascade>=3)shake(5,0.3);
+
+  // Cascade banner
+  if(scoring.cascade===2)addPopup(canvas.width/2,80,'2x CASCADE!','#FF9900');
+  else if(scoring.cascade===3)addPopup(canvas.width/2,80,'3x CASCADE!','#FF6600');
+  else if(scoring.cascade>=4)addPopup(canvas.width/2,80,scoring.cascade+'x INSANE!','#FF0066');
 
   // Flash matched candies
   matches.forEach(g=>g.candies.forEach(c=>{
@@ -538,6 +617,9 @@ function processBoard(){
     emitBurst(pos.px,pos.py,COLORS[c.color]||'#fff',8);
     addPopup(pos.px,pos.py-20,`+${Math.round(30*(1+scoring.cascade*.5))}`,'#FFD700');
   }));
+
+  // Sparkle on new specials
+  specials.forEach(s=>{const pos=renderer.canvasPos(s.x,s.y);emitBurst(pos.px,pos.py,'#FFD700',15);emitBurst(pos.px,pos.py,'#fff',8);});
 
   // Shrink then remove
   let prog=0;
@@ -566,7 +648,8 @@ function checkObjective(){
     completionScore=sc2;
     completionStars=sc2>=currentLevel.starThresholds[2]?3:sc2>=currentLevel.starThresholds[1]?2:1;
     saveProgress(currentLevel.id,completionStars);
-    emitConfetti(canvas.width/2,canvas.height*.3,30);
+    clearSave();
+    for(let i=0;i<6;i++)setTimeout(()=>emitConfetti(Math.random()*canvas.width,canvas.height*.2+Math.random()*canvas.height*.3,30),i*120);
     playWin();state='complete';
   } else if(movesLeft<=0){playLose();state='failed';}
 }
